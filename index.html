@@ -17,18 +17,18 @@
       border: 1px solid black;
     }
     th, td {
-      padding: 10px; /* Adjusted padding */
+      padding: 10px; /* Increase padding to make cells larger */
       text-align: left;
-      font-size: 20px; /* Adjusted font size */
+      font-size: 20px; /* Increase font size to make text larger */
     }
     th {
       font-size: 35px; /* Larger font size for header */
     }
     h2 {
-      font-size: 40px; /* Increased font size for page title */
+      font-size: 40px; /* Increase font size for page title */
     }
     h3 {
-      font-size: 40px; /* Increased font size for employee name */
+      font-size: 40px; /* Increase font size for employee name */
     }
     .controls {
       margin-bottom: 10px; 
@@ -95,6 +95,13 @@
     #generate-pdf:hover {
       background-color: #059669; /* hover:bg-green-600 */
     }
+    #generate-blank-pdf {
+      background-color: #fbbf24; /* bg-yellow-500 */
+      color: white;
+    }
+    #generate-blank-pdf:hover {
+      background-color: #f59e0b; /* hover:bg-yellow-600 */
+    }
     #last-update {
       color: #718096; /* text-gray-600 */
     }
@@ -156,6 +163,7 @@
       <h1>Générateur de feuilles de temps</h1>
       <div class="flex">
         <button id="refresh">🔄</button>
+        <button id="generate-blank-pdf">Feuille vierge</button>
         <div id="last-update">Dernière mise à jour: N/A</div>
         <button id="generate-pdf">Produire le PDF</button>
       </div>
@@ -255,27 +263,32 @@
         const summaryParts = event.summary.split(' - ');
         if (summaryParts.length >= 3) {
           const employeeName = summaryParts[0].trim();
-          const jobTitle = summaryParts[1].trim(); // Corrected to use job title instead of location
+          const jobTitle = summaryParts[1].trim();
+          const location = summaryParts[2].trim();
 
-          if (!weeks[weekKey][employeeName]) {
-            weeks[weekKey][employeeName] = [];
+          if (!weeks[weekKey][location]) {
+            weeks[weekKey][location] = {};
+          }
+
+          if (!weeks[weekKey][location][employeeName]) {
+            weeks[weekKey][location][employeeName] = [];
           }
 
           const shiftData = {
             date: startDate.toJSDate(),
             schedule: `${event.dtstart.toFormat('HH:mm')} - ${event.dtend.toFormat('HH:mm')}`,
-            title: jobTitle,
-            hoursPaid: '',  // Add logic to calculate hours paid if necessary
-            initials: '',  // Add logic to fetch initials if necessary
+            jobTitle: jobTitle,
+            hours: (event.dtend.diff(event.dtstart, 'hours').hours).toFixed(1), // Calculate hours
+            initials: '',
           };
-          weeks[weekKey][employeeName].push(shiftData);
+          weeks[weekKey][location][employeeName].push(shiftData);
         }
       });
       return weeks;
     }
 
-    function toggleSelectAll(week, selectAll) {
-      const checkboxes = document.querySelectorAll(`input[data-week="${week}"]`);
+    function toggleSelectAll(week, location, selectAll) {
+      const checkboxes = document.querySelectorAll(`input[data-week="${week}"][data-location="${location}"]`);
       checkboxes.forEach(checkbox => {
         checkbox.checked = selectAll;
       });
@@ -287,11 +300,20 @@
       Object.keys(selectedWeeksData).forEach(week => {
         const weekStartDate = luxon.DateTime.fromFormat(week, 'yyyy-MM-dd').setLocale('fr').toFormat('d MMMM yyyy');
 
-        const employees = selectedWeeksData[week];
+        const employees = {};
+        Object.values(selectedWeeksData[week]).forEach(locations => {
+          Object.keys(locations).forEach(employee => {
+            if (!employees[employee]) {
+              employees[employee] = [];
+            }
+            employees[employee] = employees[employee].concat(locations[employee]);
+          });
+        });
+
         Object.keys(employees).forEach(employee => {
           let htmlContent = `<div class="employee-page"><h2>Feuille de Temps - Semaine du ${weekStartDate}</h2>`;
           htmlContent += `<h3>${employee}</h3>`;
-          htmlContent += '<table><tr><th>Date</th><th>Horaire</th><th>Titre</th><th>Heures payées</th><th>Initiales</th></tr>';
+          htmlContent += '<table><tr><th>Date</th><th>Horaire</th><th>Titre</th><th>Nombre d\'heures</th><th>Initiales</th></tr>';
 
           const shifts = employees[employee];
           let lastDate = null;
@@ -303,7 +325,7 @@
               htmlContent += '<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>'; // Blank row with vertical lines
               rowCount++;
             }
-            htmlContent += `<tr><td>${formattedDate}</td><td>${shift.schedule}</td><td>${shift.title}</td><td>${shift.hoursPaid}</td><td>${shift.initials}</td></tr>`;
+            htmlContent += `<tr><td>${formattedDate}</td><td>${shift.schedule}</td><td>${shift.jobTitle}</td><td>${shift.hours}</td><td>${shift.initials}</td></tr>`;
             rowCount++;
             lastDate = shift.date;
           });
@@ -351,6 +373,36 @@
       pdf.save('feuille_de_temps.pdf');
     }
 
+    async function generateBlankPDF() {
+      const pdf = new jsPDF();
+      const margin = 10; // Margin in mm
+
+      const pdfContent = document.createElement('div');
+      pdfContent.innerHTML = `
+        <div class="employee-page">
+          <h2>Feuille de Temps - Semaine du _____________________</h2>
+          <h3>__________________________</h3>
+          <table>
+            <tr><th>Date</th><th>Horaire</th><th>Titre</th><th>Nombre d'heures</th><th>Initiales</th></tr>
+            ${'<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>'.repeat(23)}
+          </table>
+        </div>`;
+
+      document.body.appendChild(pdfContent);
+
+      await html2canvas(pdfContent, { scale: 2 }).then(canvas => {
+        const imgData = canvas.toDataURL('image/png');
+        const imgWidth = pdf.internal.pageSize.getWidth() - 2 * margin;
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+        pdf.addImage(imgData, 'PNG', margin, margin, imgWidth, imgHeight);
+      });
+
+      document.body.removeChild(pdfContent);
+
+      pdf.save('feuille_de_temps_vierge.pdf');
+    }
+
     document.getElementById('refresh').addEventListener('click', async () => {
       try {
         await requestCorsAnywhereAccess();
@@ -365,11 +417,15 @@
       document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
         if (checkbox.checked) {
           const week = checkbox.dataset.week;
+          const location = checkbox.dataset.location;
           const employee = checkbox.dataset.employee;
           if (!selectedWeeksData[week]) {
             selectedWeeksData[week] = {};
           }
-          selectedWeeksData[week][employee] = weeksData[week][employee];
+          if (!selectedWeeksData[week][location]) {
+            selectedWeeksData[week][location] = {};
+          }
+          selectedWeeksData[week][location][employee] = weeksData[week][location][employee];
         }
       });
 
@@ -380,6 +436,10 @@
 
       const htmlContents = await generateHTML(selectedWeeksData);
       await generatePDF(htmlContents);
+    });
+
+    document.getElementById('generate-blank-pdf').addEventListener('click', async () => {
+      await generateBlankPDF();
     });
 
     let weeksData = {};
@@ -413,34 +473,46 @@
         const weekTitle = document.createElement('h3');
         weekTitle.textContent = weekDisplayName;
 
-        const controlsDiv = document.createElement('div');
-        controlsDiv.className = 'controls';
-        const selectAllButton = document.createElement('button');
-        selectAllButton.textContent = 'Tout sélectionner';
-        selectAllButton.className = 'bg-blue-500';
-        selectAllButton.onclick = () => toggleSelectAll(week, true);
-        controlsDiv.appendChild(selectAllButton);
-
-        const deselectAllButton = document.createElement('button');
-        deselectAllButton.textContent = 'Tout désélectionner';
-        deselectAllButton.className = 'bg-red-500';
-        deselectAllButton.onclick = () => toggleSelectAll(week, false);
-        controlsDiv.appendChild(deselectAllButton);
-
         weekDiv.appendChild(weekTitle);
-        weekDiv.appendChild(controlsDiv);
 
-        const employees = weeksData[week];
-        Object.keys(employees).forEach(employee => {
-          const label = document.createElement('label');
-          label.className = 'flex';
-          const checkbox = document.createElement('input');
-          checkbox.type = 'checkbox';
-          checkbox.dataset.week = week;
-          checkbox.dataset.employee = employee;
-          label.appendChild(checkbox);
-          label.appendChild(document.createTextNode(employee));
-          weekDiv.appendChild(label);
+        Object.keys(weeksData[week]).forEach(location => {
+          const locationDiv = document.createElement('div');
+          locationDiv.className = 'location';
+          const locationTitle = document.createElement('h4');
+          locationTitle.textContent = location;
+
+          const controlsDiv = document.createElement('div');
+          controlsDiv.className = 'controls';
+          const selectAllButton = document.createElement('button');
+          selectAllButton.textContent = 'Tout sélectionner';
+          selectAllButton.className = 'bg-blue-500';
+          selectAllButton.onclick = () => toggleSelectAll(week, location, true);
+          controlsDiv.appendChild(selectAllButton);
+
+          const deselectAllButton = document.createElement('button');
+          deselectAllButton.textContent = 'Tout désélectionner';
+          deselectAllButton.className = 'bg-red-500';
+          deselectAllButton.onclick = () => toggleSelectAll(week, location, false);
+          controlsDiv.appendChild(deselectAllButton);
+
+          locationDiv.appendChild(locationTitle);
+          locationDiv.appendChild(controlsDiv);
+
+          const employees = weeksData[week][location];
+          Object.keys(employees).forEach(employee => {
+            const label = document.createElement('label');
+            label.className = 'flex';
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.dataset.week = week;
+            checkbox.dataset.location = location;
+            checkbox.dataset.employee = employee;
+            label.appendChild(checkbox);
+            label.appendChild(document.createTextNode(employee));
+            locationDiv.appendChild(label);
+          });
+
+          weekDiv.appendChild(locationDiv);
         });
 
         weeksContainer.appendChild(weekDiv);
