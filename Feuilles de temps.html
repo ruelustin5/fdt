@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Générateur de feuilles de temps</title>
+  <style>
+    body { font-family: Arial, sans-serif; }
+    #container { width: 800px; margin: auto; }
+    #header { position: sticky; top: 0; background-color: white; padding: 10px 0; z-index: 10; }
+    .week { margin: 10px 0; border: 1px solid #ccc; padding: 10px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    table, th, td {
+      border: 1px solid black;
+    }
+    th, td {
+      padding: 10px; /* Adjusted padding */
+      text-align: left;
+      font-size: 20px; /* Adjusted font size */
+    }
+    th {
+      font-size: 35px; /* Larger font size for header */
+    }
+    h2 {
+      font-size: 40px; /* Increased font size for page title */
+    }
+    h3 {
+      font-size: 40px; /* Increased font size for employee name */
+    }
+    .controls {
+      margin-bottom: 10px; 
+    }
+    @media print {
+      .page-break { page-break-after: always; }
+    }
+    #footer {
+      text-align: center;
+      margin-top: 20px;
+      font-style: italic;
+    }
+    input[type="checkbox"] {
+      margin-right: 5px;
+    }
+    body {
+      background-color: #f7fafc; /* bg-gray-100 */
+      color: #1a202c; /* text-gray-900 */
+    }
+    #container {
+      max-width: 56rem; /* max-w-4xl */
+      margin: auto;
+      padding: 1rem; /* p-4 */
+      background-color: white;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06); /* shadow-md */
+    }
+    #header {
+      position: sticky;
+      top: 0;
+      background-color: white;
+      padding: 1rem 1.5rem; /* py-4 px-6 */
+      z-index: 10;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06); /* shadow */
+    }
+    #header h1 {
+      font-size: 2.5rem; /* Increase title font size */
+      font-weight: 700; /* font-bold */
+    }
+    #header .flex {
+      display: flex;
+      gap: 1rem; /* space-x-4 */
+    }
+    #header button {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.75rem 1.5rem; /* Increase button padding */
+      border-radius: 0.375rem; /* rounded */
+    }
+    #refresh {
+      background-color: #3b82f6; /* bg-blue-500 */
+      color: white;
+    }
+    #refresh:hover {
+      background-color: #2563eb; /* hover:bg-blue-600 */
+    }
+    #generate-pdf {
+      background-color: #10b981; /* bg-green-500 */
+      color: white;
+    }
+    #generate-pdf:hover {
+      background-color: #059669; /* hover:bg-green-600 */
+    }
+    #last-update {
+      color: #718096; /* text-gray-600 */
+    }
+    #weeks {
+      margin-top: 1rem; /* mt-4 */
+    }
+    .week {
+      border: 1px solid #d1d5db; /* border-gray-300 */
+      border-radius: 0.375rem; /* rounded */
+      padding: 1rem; /* p-4 */
+      margin-bottom: 1rem; /* mb-4 */
+    }
+    .week h3 {
+      font-size: 1.5rem; /* Increase week title font size */
+      font-weight: 600; /* font-semibold */
+      margin-bottom: 0.5rem; /* mb-2 */
+    }
+    .controls {
+      display: flex;
+      gap: 0.5rem; /* space-x-2 */
+      margin-bottom: 0.5rem; /* mb-2 */
+    }
+    .controls button {
+      padding: 0.75rem 1.5rem; /* Increase button padding */
+      border-radius: 0.375rem; /* rounded */
+    }
+    .controls .bg-blue-500 {
+      background-color: #3b82f6;
+      color: white;
+    }
+    .controls .bg-blue-500:hover {
+      background-color: #2563eb;
+    }
+    .controls .bg-red-500 {
+      background-color: #ef4444;
+      color: white;
+    }
+    .controls .bg-red-500:hover {
+      background-color: #dc2626;
+    }
+    label.flex {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem; /* space-x-2 */
+      margin: 0.5rem 0; /* my-2 */
+      font-size: 16px; /* Increase font size for labels */
+    }
+    #footer {
+      text-align: center;
+      margin-top: 2rem; /* mt-8 */
+      font-style: italic;
+      color: #718096; /* text-gray-600 */
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <div id="header">
+      <h1>Générateur de feuilles de temps</h1>
+      <div class="flex">
+        <button id="refresh">🔄</button>
+        <div id="last-update">Dernière mise à jour: N/A</div>
+        <button id="generate-pdf">Produire le PDF</button>
+      </div>
+    </div>
+    <div id="weeks"></div>
+    <div id="pdf-content" style="display: none;"></div>
+    <div id="footer">Créé par Justin Ruel | v1.0.0</div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/luxon@2.3.0/build/global/luxon.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.4.0/jspdf.umd.min.js"></script>
+  <script>
+    const { jsPDF } = window.jspdf;
+
+    const CORS_PROXY = 'https://corsproxy.io/?https://cors-anywhere.herokuapp.com/corsdemo';
+    const ICS_URL = `https://cors-anywhere.herokuapp.com/https://calendar.getsling.com/870222/7e034f8563918163ae9702cce5c69eada79a790f1835b26bc594fde4/Sling_Calendar_all.ics`;
+
+    async function fetchCorsDemoToken() {
+      const response = await fetch(CORS_PROXY, { cache: 'no-store' });
+      const htmlText = await response.text();
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(htmlText, 'text/html');
+      const accessRequestValue = doc.querySelector('input[name="accessRequest"]').value;
+
+      console.log('Access Request Value:', accessRequestValue); // Print the access request value
+
+      return accessRequestValue;
+    }
+
+    async function requestCorsAnywhereAccess() {
+      const accessRequestValue = await fetchCorsDemoToken();
+      const accessUrl = `https://cors-anywhere.herokuapp.com/corsdemo?accessRequest=${accessRequestValue}`;
+
+      const response = await fetch(accessUrl, {
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest'
+        }
+      });
+      if (!response.ok) {
+        throw new Error(`Erreur HTTP: ${response.status}`);
+      }
+
+      console.log('CORS Anywhere Access Granted'); // Print success message
+    }
+
+    async function fetchIcsData(url) {
+      try {
+        const response = await fetch(url, {
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+          }
+        });
+        if (!response.ok) {
+          throw new Error(`Erreur HTTP: ${response.status}`);
+        }
+        const data = await response.text();
+        const lastModified = response.headers.get('Last-Modified');
+        return { data, lastModified };
+      } catch (error) {
+        console.error('Erreur lors de la récupération des données ICS:', error);
+        throw error;
+      }
+    }
+
+    function parseICS(icsData) {
+      const events = [];
+      const lines = icsData.split('\n');
+      let event = {};
+      lines.forEach(line => {
+        if (line.startsWith('BEGIN:VEVENT')) {
+          event = {};
+        } else if (line.startsWith('SUMMARY:')) {
+          event.summary = line.replace('SUMMARY:', '');
+        } else if (line.startsWith('DTSTART:')) {
+          event.dtstart = luxon.DateTime.fromISO(line.replace('DTSTART:', '').trim());
+        } else if (line.startsWith('DTEND:')) {
+          event.dtend = luxon.DateTime.fromISO(line.replace('DTEND:', '').trim());
+        } else if (line.startsWith('END:VEVENT')) {
+          events.push(event);
+        }
+      });
+      return events;
+    }
+
+    function convertToWeeks(events) {
+      const weeks = {};
+      events.forEach(event => {
+        const startDate = event.dtstart;
+        const weekStart = startDate.minus({ days: (startDate.weekday % 7) }); // Start week on Sunday
+        const weekKey = weekStart.toFormat('yyyy-MM-dd');
+
+        if (!weeks[weekKey]) {
+          weeks[weekKey] = {};
+        }
+
+        const summaryParts = event.summary.split(' - ');
+        if (summaryParts.length >= 3) {
+          const employeeName = summaryParts[0].trim();
+          const jobTitle = summaryParts[1].trim(); // Corrected to use job title instead of location
+
+          if (!weeks[weekKey][employeeName]) {
+            weeks[weekKey][employeeName] = [];
+          }
+
+          const shiftData = {
+            date: startDate.toJSDate(),
+            schedule: `${event.dtstart.toFormat('HH:mm')} - ${event.dtend.toFormat('HH:mm')}`,
+            title: jobTitle,
+            hoursPaid: '',  // Add logic to calculate hours paid if necessary
+            initials: '',  // Add logic to fetch initials if necessary
+          };
+          weeks[weekKey][employeeName].push(shiftData);
+        }
+      });
+      return weeks;
+    }
+
+    function toggleSelectAll(week, selectAll) {
+      const checkboxes = document.querySelectorAll(`input[data-week="${week}"]`);
+      checkboxes.forEach(checkbox => {
+        checkbox.checked = selectAll;
+      });
+    }
+
+    async function generateHTML(selectedWeeksData) {
+      let htmlContents = [];
+
+      Object.keys(selectedWeeksData).forEach(week => {
+        const weekStartDate = luxon.DateTime.fromFormat(week, 'yyyy-MM-dd').setLocale('fr').toFormat('d MMMM yyyy');
+
+        const employees = selectedWeeksData[week];
+        Object.keys(employees).forEach(employee => {
+          let htmlContent = `<div class="employee-page"><h2>Feuille de Temps - Semaine du ${weekStartDate}</h2>`;
+          htmlContent += `<h3>${employee}</h3>`;
+          htmlContent += '<table><tr><th>Date</th><th>Horaire</th><th>Titre</th><th>Heures payées</th><th>Initiales</th></tr>';
+
+          const shifts = employees[employee];
+          let lastDate = null;
+          let rowCount = 1; // Start with the header row
+
+          shifts.forEach(shift => {
+            const formattedDate = luxon.DateTime.fromJSDate(new Date(shift.date)).setLocale('fr').toFormat('d MMMM');
+            if (lastDate && lastDate.toDateString() !== shift.date.toDateString()) {
+              htmlContent += '<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>'; // Blank row with vertical lines
+              rowCount++;
+            }
+            htmlContent += `<tr><td>${formattedDate}</td><td>${shift.schedule}</td><td>${shift.title}</td><td>${shift.hoursPaid}</td><td>${shift.initials}</td></tr>`;
+            rowCount++;
+            lastDate = shift.date;
+          });
+
+          // Add blank rows to fill the page
+          const remainingRows = 23 - rowCount;
+          for (let i = 0; i < remainingRows; i++) {
+            htmlContent += '<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>';
+          }
+
+          htmlContent += '</table></div>';
+          htmlContents.push(htmlContent);
+        });
+      });
+
+      console.log('Generated HTML Contents:', htmlContents); // Log to check generated HTML content
+      return htmlContents;
+    }
+
+    async function generatePDF(htmlContents) {
+      const pdf = new jsPDF();
+      const margin = 10; // Margin in mm
+
+      for (const [index, htmlContent] of htmlContents.entries()) {
+        const pdfContent = document.createElement('div');
+        pdfContent.innerHTML = htmlContent;
+        pdfContent.style.margin = `${margin}px`;
+
+        document.body.appendChild(pdfContent);
+
+        await html2canvas(pdfContent, { scale: 2 }).then(canvas => {
+          const imgData = canvas.toDataURL('image/png');
+          const imgWidth = pdf.internal.pageSize.getWidth() - 2 * margin;
+          const imgHeight = (canvas.height * imgWidth) / canvas.width;
+          
+          if (index > 0) {
+            pdf.addPage();
+          }
+          pdf.addImage(imgData, 'PNG', margin, margin, imgWidth, imgHeight);
+        });
+
+        document.body.removeChild(pdfContent);
+      }
+
+      pdf.save('feuille_de_temps.pdf');
+    }
+
+    document.getElementById('refresh').addEventListener('click', async () => {
+      try {
+        await requestCorsAnywhereAccess();
+      } catch (error) {
+        // Handle errors silently
+      }
+      await refreshIcsData();
+    });
+
+    document.getElementById('generate-pdf').addEventListener('click', async () => {
+      const selectedWeeksData = {};
+      document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+        if (checkbox.checked) {
+          const week = checkbox.dataset.week;
+          const employee = checkbox.dataset.employee;
+          if (!selectedWeeksData[week]) {
+            selectedWeeksData[week] = {};
+          }
+          selectedWeeksData[week][employee] = weeksData[week][employee];
+        }
+      });
+
+      if (Object.keys(selectedWeeksData).length === 0) {
+        alert('Aucune semaine sélectionnée pour générer le PDF.');
+        return;
+      }
+
+      const htmlContents = await generateHTML(selectedWeeksData);
+      await generatePDF(htmlContents);
+    });
+
+    let weeksData = {};
+
+    async function refreshIcsData() {
+      try {
+        const { data: icsData, lastModified } = await fetchIcsData(ICS_URL);
+        const events = parseICS(icsData);
+        weeksData = convertToWeeks(events);
+
+        const lastModifiedDate = luxon.DateTime.fromHTTP(lastModified).setLocale('fr');
+        document.getElementById('last-update').textContent = `Dernière mise à jour: ${lastModifiedDate.toFormat('HH:mm')}`;
+
+        displayWeeks();
+      } catch (error) {
+        // Handle errors silently
+      }
+    }
+
+    function displayWeeks() {
+      const weeksContainer = document.getElementById('weeks');
+      weeksContainer.innerHTML = '';
+
+      const sortedWeeks = Object.keys(weeksData).sort((a, b) => new Date(b) - new Date(a)); // Sort weeks in descending order
+
+      sortedWeeks.forEach(week => {
+        const weekDiv = document.createElement('div');
+        weekDiv.className = 'week';
+        const weekStartDate = luxon.DateTime.fromFormat(week, 'yyyy-MM-dd').setLocale("fr");
+        const weekDisplayName = `Semaine du ${weekStartDate.toFormat('d MMMM')}`;
+        const weekTitle = document.createElement('h3');
+        weekTitle.textContent = weekDisplayName;
+
+        const controlsDiv = document.createElement('div');
+        controlsDiv.className = 'controls';
+        const selectAllButton = document.createElement('button');
+        selectAllButton.textContent = 'Tout sélectionner';
+        selectAllButton.className = 'bg-blue-500';
+        selectAllButton.onclick = () => toggleSelectAll(week, true);
+        controlsDiv.appendChild(selectAllButton);
+
+        const deselectAllButton = document.createElement('button');
+        deselectAllButton.textContent = 'Tout désélectionner';
+        deselectAllButton.className = 'bg-red-500';
+        deselectAllButton.onclick = () => toggleSelectAll(week, false);
+        controlsDiv.appendChild(deselectAllButton);
+
+        weekDiv.appendChild(weekTitle);
+        weekDiv.appendChild(controlsDiv);
+
+        const employees = weeksData[week];
+        Object.keys(employees).forEach(employee => {
+          const label = document.createElement('label');
+          label.className = 'flex';
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.dataset.week = week;
+          checkbox.dataset.employee = employee;
+          label.appendChild(checkbox);
+          label.appendChild(document.createTextNode(employee));
+          weekDiv.appendChild(label);
+        });
+
+        weeksContainer.appendChild(weekDiv);
+      });
+    }
+
+    // Refresh ICS data when the page loads
+    window.onload = async () => {
+      try {
+        await requestCorsAnywhereAccess();
+      } catch (error) {
+        // Handle errors silently
+      }
+      await refreshIcsData();
+    };
+  </script>
+</body>
+</html>
